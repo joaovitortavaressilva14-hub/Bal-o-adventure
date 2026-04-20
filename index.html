@@ -3,135 +3,302 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Balão Adventure V2</title>
+    <title>Balão Adventure</title>
     <style>
-        body { margin: 0; overflow: hidden; background-color: #e0f7fa; touch-action: none; font-family: 'Arial', sans-serif; }
-        canvas { display: block; background: linear-gradient(to bottom, #87CEEB, #E0F7FA); }
-        #ui { position: absolute; top: 10px; left: 10px; font-size: 18px; color: #333; font-weight: bold; pointer-events: none; background: rgba(255,255,255,0.7); padding: 5px 10px; border-radius: 10px; }
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            font-family: 'Arial', sans-serif;
+            background-color: #222;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        #game-container {
+            position: relative;
+            width: 100vw;
+            max-width: 400px;
+            height: 100vh;
+            background: linear-gradient(to bottom, #87CEEB, #E0F7FA);
+            overflow: hidden;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+
+        canvas {
+            display: block;
+        }
+
+        /* Telas de Menu e Game Over */
+        .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            text-align: center;
+            z-index: 10;
+        }
+
+        h1 { font-size: 3rem; margin-bottom: 10px; color: #ff4d4d; text-shadow: 2px 2px #fff; }
+        p { font-size: 1.2rem; margin-bottom: 20px; }
+
+        .btn {
+            padding: 15px 30px;
+            font-size: 1.2rem;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            margin: 10px;
+            transition: transform 0.2s;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .btn-play { background-color: #4CAF50; color: white; }
+        .btn-discord { background-color: #5865F2; color: white; }
+        .btn:hover { transform: scale(1.1); }
+
+        #score-display {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            font-size: 24px;
+            font-weight: bold;
+            color: #333;
+            z-index: 5;
+        }
+
+        .hidden { display: none !important; }
     </style>
 </head>
 <body>
-    <div id="ui">Pontos: <span id="score">0</span> | Recorde: <span id="best">0</span></div>
+
+<div id="game-container">
+    <div id="score-display">Pontos: 0</div>
+    
+    <div id="start-menu" class="overlay">
+        <h1>Balão Adventure</h1>
+        <button class="btn btn-play" onclick="startGame()">JOGAR</button>
+        <a href="https://discord.gg/Sj953mReyF" target="_blank" class="btn btn-discord">Junte-se ao Discord!</a>
+    </div>
+
+    <div id="game-over" class="overlay hidden">
+        <h2 style="font-size: 2.5rem;">PERDEU!</h2>
+        <p id="final-score">Pontuação: 0</p>
+        <p id="best-score">Recorde: 0</p>
+        <button class="btn btn-play" onclick="startGame()">Tentar Novamente</button>
+    </div>
+
     <canvas id="gameCanvas"></canvas>
+</div>
 
 <script>
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
-    const scoreElement = document.getElementById('score');
-    const bestElement = document.getElementById('best');
+    const scoreElement = document.getElementById('score-display');
+    const gameOverScreen = document.getElementById('game-over');
+    const startMenu = document.getElementById('start-menu');
 
-    canvas.width = window.innerWidth;
+    // Ajuste de tamanho do canvas
+    canvas.width = Math.min(window.innerWidth, 400);
     canvas.height = window.innerHeight;
 
-    let score = 0;
-    let highScore = localStorage.getItem("balaoRecorde") || 0;
-    bestElement.innerText = highScore;
+    // Variáveis do Jogo
+    let balloon, obstacles, coins, score, gameRunning, frameCount, record;
+    record = localStorage.getItem('balloonRecord') || 0;
 
-    let gameActive = true;
-    let gameSpeed = 4;
-    let frameCount = 0;
+    const gravity = 0.25;
+    const lift = -5;
 
-    const player = { x: canvas.width / 2, y: canvas.height * 0.7, width: 30, height: 45, targetX: canvas.width / 2 };
-    let obstacles = [];
-    let items = [];
-
-    const move = (e) => {
-        let x = e.touches ? e.touches[0].clientX : e.clientX;
-        player.targetX = x - player.width / 2;
-    };
-    window.addEventListener('mousemove', move);
-    window.addEventListener('touchstart', move);
-    window.addEventListener('touchmove', move);
-
-    function createObstacle() {
-        const width = Math.random() * (canvas.width * 0.4) + 60;
-        const x = Math.random() * (canvas.width - width);
-        obstacles.push({ x, y: -40, width, height: 15 });
+    function init() {
+        balloon = {
+            x: 50,
+            y: canvas.height / 2,
+            radius: 15,
+            velocity: 0
+        };
+        obstacles = [];
+        coins = [];
+        score = 0;
+        frameCount = 0;
+        gameRunning = true;
+        scoreElement.innerText = `Pontos: ${score}`;
     }
 
-    function createItem() {
-        const x = Math.random() * (canvas.width - 20);
-        items.push({ x, y: -20, radius: 10 });
+    function startGame() {
+        startMenu.classList.add('hidden');
+        gameOverScreen.classList.add('hidden');
+        init();
+        animate();
+    }
+
+    // Input do Jogador
+    const handleInput = () => { if(gameRunning) balloon.velocity += lift; };
+    window.addEventListener('mousedown', handleInput);
+    window.addEventListener('touchstart', (e) => { e.preventDefault(); handleInput(); });
+
+    function createObstacle() {
+        const gap = 150;
+        const minHeight = 50;
+        const pos = Math.random() * (canvas.height - gap - (minHeight * 2)) + minHeight;
+        
+        obstacles.push({
+            x: canvas.width,
+            top: pos,
+            bottom: canvas.height - pos - gap,
+            width: 50,
+            passed: false
+        });
+    }
+
+    function createCoin() {
+        coins.push({
+            x: canvas.width + 100,
+            y: Math.random() * (canvas.height - 100) + 50,
+            radius: 10,
+            collected: false
+        });
     }
 
     function update() {
-        if (!gameActive) return;
-        player.x += (player.targetX - player.x) * 0.15;
+        balloon.velocity += gravity;
+        balloon.y += balloon.velocity;
+
+        // Colisão com teto e chão
+        if (balloon.y + balloon.radius > canvas.height || balloon.y - balloon.radius < 0) {
+            endGame();
+        }
+
+        // Gerar obstáculos e moedas
+        if (frameCount % 100 === 0) createObstacle();
+        if (frameCount % 150 === 0) createCoin();
+
+        // Atualizar Obstáculos
+        for (let i = obstacles.length - 1; i >= 0; i--) {
+            obstacles[i].x -= 3;
+
+            // Verificação de Colisão (Retângulos)
+            if (
+                balloon.x + balloon.radius > obstacles[i].x &&
+                balloon.x - balloon.radius < obstacles[i].x + obstacles[i].width
+            ) {
+                if (balloon.y - balloon.radius < obstacles[i].top || balloon.y + balloon.radius > canvas.height - obstacles[i].bottom) {
+                    endGame();
+                }
+            }
+
+            // Pontuar ao passar
+            if (!obstacles[i].passed && obstacles[i].x < balloon.x) {
+                obstacles[i].passed = true;
+                score++;
+                scoreElement.innerText = `Pontos: ${score}`;
+            }
+
+            if (obstacles[i].x + obstacles[i].width < 0) obstacles.splice(i, 1);
+        }
+
+        // Atualizar Moedas
+        for (let i = coins.length - 1; i >= 0; i--) {
+            coins[i].x -= 3;
+            
+            // Colisão com Moeda
+            let dx = balloon.x - coins[i].x;
+            let dy = balloon.y - coins[i].y;
+            let distance = Math.sqrt(dx * dx + dy * dy);
+
+            if (distance < balloon.radius + coins[i].radius) {
+                score += 5;
+                scoreElement.innerText = `Pontos: ${score}`;
+                coins.splice(i, 1);
+                continue;
+            }
+
+            if (coins[i].x < -20) coins.splice(i, 1);
+        }
 
         frameCount++;
-        if (frameCount % Math.max(25, Math.floor(80 - gameSpeed * 2)) === 0) createObstacle();
-        if (frameCount % 50 === 0) createItem();
-
-        obstacles.forEach((obs, i) => {
-            obs.y += gameSpeed;
-            if (player.x < obs.x + obs.width && player.x + player.width > obs.x &&
-                player.y < obs.y + obs.height && player.y + player.height > obs.y) gameOver();
-            if (obs.y > canvas.height) obstacles.splice(i, 1);
-        });
-
-        items.forEach((item, i) => {
-            item.y += gameSpeed;
-            const dist = Math.hypot((player.x + 15) - item.x, (player.y + 20) - item.y);
-            if (dist < 25) {
-                score++;
-                scoreElement.innerText = score;
-                items.splice(i, 1);
-                gameSpeed += 0.15; // Aceleração constante
-            }
-            if (item.y > canvas.height) items.splice(i, 1);
-        });
     }
 
     function draw() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        
-        // Desenha Balão
-        ctx.fillStyle = "#ff5252"; // Balão Vermelho
-        ctx.beginPath();
-        ctx.ellipse(player.x + 15, player.y + 15, 15, 20, 0, 0, Math.PI*2);
-        ctx.fill();
-        ctx.fillStyle = "#795548"; // Cestinha
-        ctx.fillRect(player.x + 10, player.y + 35, 10, 8);
 
-        // Obstáculos
+        // Desenhar Balão
+        ctx.beginPath();
+        ctx.arc(balloon.x, balloon.y, balloon.radius, 0, Math.PI * 2);
+        ctx.fillStyle = "#ff4d4d";
+        ctx.fill();
+        ctx.closePath();
+        // Cordinha do balão
+        ctx.beginPath();
+        ctx.moveTo(balloon.x, balloon.y + balloon.radius);
+        ctx.lineTo(balloon.x, balloon.y + balloon.radius + 10);
+        ctx.strokeStyle = "#333";
+        ctx.stroke();
+
+        // Desenhar Obstáculos (com "espinhos")
         obstacles.forEach(obs => {
-            ctx.fillStyle = "#37474f";
-            ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
-            // Espinhos
-            ctx.fillStyle = "#000";
-            for(let i=0; i<obs.width; i+=10) {
+            ctx.fillStyle = "#444";
+            // Topo
+            ctx.fillRect(obs.x, 0, obs.width, obs.top);
+            // Base
+            ctx.fillRect(obs.x, canvas.height - obs.bottom, obs.width, obs.bottom);
+            
+            // Efeito de espinhos simples
+            ctx.fillStyle = "#222";
+            for(let i=0; i<obs.width; i+=10){
                 ctx.beginPath();
-                ctx.moveTo(obs.x + i, obs.y + obs.height);
-                ctx.lineTo(obs.x + i + 5, obs.y + obs.height + 7);
-                ctx.lineTo(obs.x + i + 10, obs.y + obs.height);
+                ctx.moveTo(obs.x + i, obs.top);
+                ctx.lineTo(obs.x + i + 5, obs.top + 10);
+                ctx.lineTo(obs.x + i + 10, obs.top);
+                ctx.fill();
+
+                ctx.beginPath();
+                ctx.moveTo(obs.x + i, canvas.height - obs.bottom);
+                ctx.lineTo(obs.x + i + 5, canvas.height - obs.bottom - 10);
+                ctx.lineTo(obs.x + i + 10, canvas.height - obs.bottom);
                 ctx.fill();
             }
         });
 
-        // Moedas/Itens
-        items.forEach(item => {
-            ctx.fillStyle = "#ffd700";
+        // Desenhar Moedas
+        coins.forEach(coin => {
             ctx.beginPath();
-            ctx.arc(item.x, item.y, item.radius, 0, Math.PI*2);
+            ctx.arc(coin.x, coin.y, coin.radius, 0, Math.PI * 2);
+            ctx.fillStyle = "#FFD700";
             ctx.fill();
-            ctx.strokeStyle = "#b8860b";
+            ctx.strokeStyle = "#B8860B";
             ctx.stroke();
+            ctx.closePath();
         });
     }
 
-    function gameOver() {
-        gameActive = false;
-        if (score > highScore) {
-            localStorage.setItem("balaoRecorde", score);
-            alert("NOVO RECORDE! 🎉: " + score);
-        } else {
-            alert("PERDEU! Pontuação: " + score + "\nRecorde: " + highScore);
+    function endGame() {
+        gameRunning = false;
+        if (score > record) {
+            record = score;
+            localStorage.setItem('balloonRecord', record);
         }
-        location.reload();
+        document.getElementById('final-score').innerText = `Pontuação: ${score}`;
+        document.getElementById('best-score').innerText = `Recorde: ${record}`;
+        gameOverScreen.classList.remove('hidden');
     }
 
-    function loop() { update(); draw(); requestAnimationFrame(loop); }
-    loop();
+    function animate() {
+        if (!gameRunning) return;
+        update();
+        draw();
+        requestAnimationFrame(animate);
+    }
 </script>
+
 </body>
 </html>
