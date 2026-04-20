@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Balão Adventure</title>
+    <title>Balão Adventure Pro</title>
     <style>
         body { margin: 0; padding: 0; overflow: hidden; font-family: sans-serif; background: #000; display: flex; justify-content: center; }
         #game-container { position: relative; width: 100vw; max-width: 450px; height: 100vh; background: #ADD8E6; overflow: hidden; }
@@ -12,15 +12,20 @@
         h1.main-title { font-size: 3.5rem; color: #ff4d4d; text-shadow: 2px 2px #fff; margin: 0; font-weight: 900; }
         .btn-discord { background: #5865F2; color: white; padding: 15px 30px; border-radius: 12px; text-decoration: none; font-weight: bold; margin: 20px 0; border: 2px solid #fff; display: inline-block; }
         .btn-play { background: #4CAF50; color: white; padding: 15px 50px; border-radius: 50px; border: none; font-size: 1.5rem; cursor: pointer; font-weight: bold; }
-        #score-ui { position: absolute; top: 15px; left: 15px; color: #333; font-size: 24px; font-weight: bold; z-index: 5; }
+        #ui-layer { position: absolute; top: 15px; left: 15px; color: #333; font-size: 20px; font-weight: bold; z-index: 5; pointer-events: none; }
         #custom-alert { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #fff; color: #333; padding: 25px; width: 80%; border-radius: 8px; box-shadow: 0 5px 30px rgba(0,0,0,0.8); z-index: 100; display: none; }
         #custom-alert button { float: right; background: transparent; border: none; color: #007BFF; font-weight: bold; font-size: 1.2rem; cursor: pointer; margin-top: 20px; }
+        .timer { color: red; font-size: 16px; display: block; }
     </style>
 </head>
 <body>
 
 <div id="game-container">
-    <div id="score-ui">Pontos: <span id="val">0</span></div>
+    <div id="ui-layer">
+        Pontos: <span id="val">0</span><br>
+        <span id="shield-timer" class="timer"></span>
+    </div>
+
     <div id="start-menu" class="overlay">
         <h1 class="main-title">BALÃO ADVENTURE</h1>
         <p id="menu-record" style="font-size: 1.6rem; margin: 15px 0; color: #FFD700; font-weight: bold;">Recorde: 0</p>
@@ -28,11 +33,13 @@
         <br>
         <button class="btn-play" onclick="startGame()">JOGAR</button>
     </div>
+
     <div id="custom-alert">
         <h2 style="margin:0;">PERDEU!</h2>
         <p id="alert-txt"></p>
         <button onclick="startGame()">OK</button>
     </div>
+
     <canvas id="gameCanvas"></canvas>
 </div>
 
@@ -40,6 +47,7 @@
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
     const scoreVal = document.getElementById('val');
+    const shieldUi = document.getElementById('shield-timer');
     const alertBox = document.getElementById('custom-alert');
     const alertTxt = document.getElementById('alert-txt');
     const menuRecord = document.getElementById('menu-record');
@@ -49,9 +57,10 @@
     canvas.width = W; canvas.height = H;
 
     let balloonX, platforms, coins, score, record, gameRunning, frameCount, gameSpeed;
+    let shieldTime = 0; // Tempo de escudo
+    let magnetTime = 0; // Tempo de ímã
     const balloonY = H * 0.8; 
     const balloonRadius = 15;
-    const coinRadius = 10;
     
     record = parseInt(localStorage.getItem('balao_final_record')) || 0;
     menuRecord.innerText = "Recorde: " + record;
@@ -62,9 +71,12 @@
         coins = [];
         score = 0;
         frameCount = 0;
-        gameSpeed = 4; // VELOCIDADE INICIAL
+        gameSpeed = 4;
+        shieldTime = 0;
+        magnetTime = 0;
         gameRunning = true;
         scoreVal.innerText = score;
+        shieldUi.innerText = "";
         alertBox.style.display = 'none';
         menuRecord.innerText = "Recorde: " + record;
     }
@@ -87,35 +99,71 @@
     canvas.addEventListener('touchmove', (e) => { e.preventDefault(); handleMove(e); }, {passive: false});
 
     function update() {
-        // Gerar itens baseado na velocidade (pra não encavalar)
-        let spawnInterval = Math.max(40, 90 - (gameSpeed * 5));
-        if(frameCount % Math.floor(spawnInterval) === 0) {
-            platforms.push({ x: Math.random() * (W - 120), y: -50, w: 120, h: 15 });
+        // Timers dos Power-ups
+        if(shieldTime > 0) {
+            shieldTime--;
+            shieldUi.innerText = "ESCUDO: " + Math.ceil(shieldTime/60) + "s";
+        } else {
+            shieldUi.innerText = "";
         }
-        if(frameCount % 40 === 0) coins.push({ x: Math.random() * (W - 20) + 10, y: -50 });
+        if(magnetTime > 0) magnetTime--;
 
-        // Obstáculos
+        // Spawns
+        if(frameCount % 80 === 0) platforms.push({ x: Math.random() * (W - 120), y: -50, w: 120, h: 15 });
+        
+        // Mais moedas amarelas (spawn rápido)
+        if(frameCount % 25 === 0) coins.push({ x: Math.random() * (W - 20) + 10, y: -50, type: 'yellow' });
+        
+        // Moeda Vermelha (Escudo) - Rara
+        if(frameCount % 600 === 0) coins.push({ x: Math.random() * (W - 20) + 10, y: -50, type: 'red' });
+        
+        // Moeda Verde (Ímã) - Rara
+        if(frameCount % 450 === 0) coins.push({ x: Math.random() * (W - 20) + 10, y: -50, type: 'green' });
+
+        // Update Plataformas
         for (let i = platforms.length - 1; i >= 0; i--) {
             platforms[i].y += gameSpeed;
             let p = platforms[i];
-            if(balloonY - balloonRadius < p.y + p.h + 5 && balloonY + balloonRadius > p.y &&
-               balloonX + 10 > p.x && balloonX - 10 < p.x + p.w) {
-                endGame();
+            // Se NÃO tiver escudo, morre. Se TIVER escudo, atravessa.
+            if(shieldTime <= 0) {
+                if(balloonY - balloonRadius < p.y + p.h + 5 && balloonY + balloonRadius > p.y &&
+                   balloonX + 10 > p.x && balloonX - 10 < p.x + p.w) {
+                    endGame();
+                }
             }
             if(p.y > H) platforms.splice(i, 1);
         }
 
-        // Moedas
+        // Update Moedas
         for (let i = coins.length - 1; i >= 0; i--) {
             coins[i].y += gameSpeed;
             let c = coins[i];
+
+            // Efeito do Ímã (Puxa moedas amarelas)
+            if(magnetTime > 0 && c.type === 'yellow') {
+                let dxM = balloonX - c.x;
+                let dyM = balloonY - c.y;
+                let distM = Math.sqrt(dxM*dxM + dyM*dyM);
+                if(distM < 150) { // Raio de atração
+                    c.x += dxM * 0.1;
+                    c.y += dyM * 0.1;
+                }
+            }
+
             let dx = balloonX - c.x;
             let dy = balloonY - c.y;
-            if (Math.sqrt(dx*dx + dy*dy) < (balloonRadius + coinRadius)) {
-                score += 1;
+            let distance = Math.sqrt(dx*dx + dy*dy);
+
+            if (distance < (balloonRadius + 10)) {
+                if(c.type === 'yellow') {
+                    score += 1;
+                    gameSpeed += 0.05;
+                } else if(c.type === 'red') {
+                    shieldTime = 1200; // 20 segundos (60fps * 20)
+                } else if(c.type === 'green') {
+                    magnetTime = 600; // 10 segundos de ímã
+                }
                 scoreVal.innerText = score;
-                // AUMENTA A VELOCIDADE A CADA PONTO!
-                gameSpeed += 0.1; 
                 coins.splice(i, 1);
             } else if (c.y > H) {
                 coins.splice(i, 1);
@@ -126,17 +174,34 @@
 
     function draw() {
         ctx.clearRect(0, 0, W, H);
+
+        // Moedas
         coins.forEach(c => {
-            ctx.fillStyle = "yellow";
-            ctx.beginPath(); ctx.arc(c.x, c.y, coinRadius, 0, Math.PI*2); ctx.fill();
-            ctx.strokeStyle = "orange"; ctx.stroke();
+            ctx.fillStyle = c.type === 'yellow' ? "yellow" : (c.type === 'red' ? "red" : "#00FF00");
+            ctx.beginPath(); ctx.arc(c.x, c.y, 10, 0, Math.PI*2); ctx.fill();
+            ctx.strokeStyle = "white"; ctx.stroke();
         });
+
+        // Balão + Efeitos Visuais
+        if(shieldTime > 0) { // Aura de Escudo
+            ctx.strokeStyle = "rgba(255, 0, 0, 0.5)";
+            ctx.lineWidth = 5;
+            ctx.beginPath(); ctx.arc(balloonX, balloonY, balloonRadius + 5, 0, Math.PI*2); ctx.stroke();
+        }
+        if(magnetTime > 0) { // Aura de Ímã
+            ctx.strokeStyle = "rgba(0, 255, 0, 0.5)";
+            ctx.lineWidth = 3;
+            ctx.beginPath(); ctx.arc(balloonX, balloonY, balloonRadius + 8, 0, Math.PI*2); ctx.stroke();
+        }
+
         ctx.fillStyle = "red";
         ctx.beginPath(); ctx.arc(balloonX, balloonY, balloonRadius, 0, Math.PI*2); ctx.fill();
         ctx.fillStyle = "#333";
         ctx.fillRect(balloonX - 5, balloonY + 13, 10, 5); 
         ctx.strokeStyle = "#333"; ctx.lineWidth = 2;
         ctx.beginPath(); ctx.moveTo(balloonX, balloonY + 18); ctx.lineTo(balloonX, balloonY + 30); ctx.stroke();
+
+        // Plataformas
         platforms.forEach(p => {
             ctx.fillStyle = "#222";
             ctx.fillRect(p.x, p.y, p.w, p.h);
@@ -154,7 +219,7 @@
             record = score; 
             localStorage.setItem('balao_final_record', record); 
         }
-        alertTxt.innerHTML = `Pontos: <b>${score}</b><br>Recorde: <b>${record}</b><br><small>Velocidade atingida: ${gameSpeed.toFixed(1)}</small>`;
+        alertTxt.innerHTML = `Pontos: <b>${score}</b><br>Recorde: <b>${record}</b>`;
         alertBox.style.display = 'block';
     }
 
