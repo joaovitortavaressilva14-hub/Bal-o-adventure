@@ -3,33 +3,36 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Balão Adventure Ultimate</title>
+    <title>Balão Adventure Pro</title>
     <style>
         body { margin: 0; padding: 0; overflow: hidden; font-family: sans-serif; background: #000; display: flex; justify-content: center; }
         #game-container { position: relative; width: 100vw; max-width: 450px; height: 100vh; background: #ADD8E6; overflow: hidden; }
         canvas { display: block; touch-action: none; }
+        
         .overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); display: flex; flex-direction: column; justify-content: center; align-items: center; color: white; z-index: 10; text-align: center; }
         h1.main-title { font-size: 3.5rem; color: #ff4d4d; text-shadow: 2px 2px #fff; margin: 0; font-weight: 900; }
+        
         .btn-discord { background: #5865F2; color: white; padding: 15px 30px; border-radius: 12px; text-decoration: none; font-weight: bold; margin: 20px 0; border: 2px solid #fff; display: inline-block; }
         .btn-play { background: #4CAF50; color: white; padding: 15px 50px; border-radius: 50px; border: none; font-size: 1.5rem; cursor: pointer; font-weight: bold; }
         
-        /* UI de Status e Pontos */
-        #ui-layer { position: absolute; top: 15px; left: 15px; color: #333; font-size: 22px; font-weight: bold; z-index: 5; pointer-events: none; text-shadow: 1px 1px #fff; }
-        .status-text { font-size: 16px; display: block; margin-top: 5px; }
-        #shield-status { color: #ff0000; }
-        #magnet-status { color: #008000; }
+        /* UI DE STATUS - IGUAL À SUA IMAGEM */
+        #ui-layer { position: absolute; top: 15px; left: 15px; z-index: 5; pointer-events: none; }
+        #score-text { color: #333; font-size: 24px; font-weight: bold; margin-bottom: 5px; display: block; }
+        .status-timer { font-size: 18px; font-weight: bold; margin-top: 5px; text-shadow: 1px 1px #000; }
+        #shield-timer { color: #ff0000; } /* Vermelho */
+        #magnet-timer { color: #00ff00; } /* Verde */
 
         #custom-alert { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #fff; color: #333; padding: 25px; width: 80%; border-radius: 8px; box-shadow: 0 5px 30px rgba(0,0,0,0.8); z-index: 100; display: none; text-align: center; }
-        #custom-alert button { background: #007BFF; border: none; color: white; padding: 10px 25px; border-radius: 5px; font-weight: bold; font-size: 1.1rem; cursor: pointer; margin-top: 20px; }
+        #custom-alert button { background: #007BFF; border: none; color: white; padding: 12px 30px; border-radius: 5px; font-weight: bold; font-size: 1.1rem; cursor: pointer; margin-top: 20px; }
     </style>
 </head>
 <body>
 
 <div id="game-container">
     <div id="ui-layer">
-        Pontos: <span id="val">0</span>
-        <div id="shield-status" class="status-text"></div>
-        <div id="magnet-status" class="status-text"></div>
+        <span id="score-text">Pontos: <span id="val">0</span></span>
+        <div id="shield-timer" class="status-timer"></div>
+        <div id="magnet-timer" class="status-timer"></div>
     </div>
 
     <div id="start-menu" class="overlay">
@@ -41,9 +44,9 @@
     </div>
 
     <div id="custom-alert">
-        <h2 style="margin:0; color: red;">PERDEU!</h2>
-        <p id="alert-txt" style="font-size: 1.2rem;"></p>
-        <button onclick="startGame()">TENTAR DE NOVO</button>
+        <h2 style="margin:0; color: #ff4d4d;">GAME OVER!</h2>
+        <p id="alert-txt" style="font-size: 1.3rem; margin: 15px 0;"></p>
+        <button onclick="startGame()">OK, TENTAR DE NOVO</button>
     </div>
 
     <canvas id="gameCanvas"></canvas>
@@ -53,8 +56,8 @@
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
     const scoreVal = document.getElementById('val');
-    const shieldUi = document.getElementById('shield-status');
-    const magnetUi = document.getElementById('magnet-status');
+    const shieldUi = document.getElementById('shield-timer');
+    const magnetUi = document.getElementById('magnet-timer');
     const alertBox = document.getElementById('custom-alert');
     const alertTxt = document.getElementById('alert-txt');
     const menuRecord = document.getElementById('menu-record');
@@ -64,17 +67,19 @@
     canvas.width = W; canvas.height = H;
 
     let balloonX, platforms, coins, score, record, gameRunning, frameCount, gameSpeed;
-    let shieldTime = 0;
-    let magnetTime = 0;
+    let shieldTime = 0; 
+    let magnetTime = 0; 
     const balloonY = H * 0.8; 
     const balloonRadius = 15;
     
-    // Função para carregar e mostrar o recorde
-    function updateRecordUI() {
-        record = parseInt(localStorage.getItem('balao_adventure_master_record')) || 0;
+    // NOME DA CHAVE ÚNICO PARA O RECORDE
+    const STORAGE_KEY = 'balao_adventure_vfinal_rec';
+
+    function updateRecordDisplay() {
+        record = parseInt(localStorage.getItem(STORAGE_KEY)) || 0;
         menuRecord.innerText = "Recorde: " + record;
     }
-    updateRecordUI();
+    updateRecordDisplay();
 
     function init() {
         balloonX = W / 2;
@@ -90,7 +95,7 @@
         shieldUi.innerText = "";
         magnetUi.innerText = "";
         alertBox.style.display = 'none';
-        updateRecordUI();
+        updateRecordDisplay();
     }
 
     function startGame() {
@@ -111,7 +116,7 @@
     canvas.addEventListener('touchmove', (e) => { e.preventDefault(); handleMove(e); }, {passive: false});
 
     function update() {
-        // Timers (60 frames = 1 segundo)
+        // Timers (20 segundos = 1200 frames a 60fps)
         if(shieldTime > 0) {
             shieldTime--;
             shieldUi.innerText = "🛡️ ESCUDO: " + Math.ceil(shieldTime/60) + "s";
@@ -122,11 +127,11 @@
             magnetUi.innerText = "🧲 ÍMÃ: " + Math.ceil(magnetTime/60) + "s";
         } else { magnetUi.innerText = ""; }
 
-        // Spawn de plataformas e moedas
+        // Spawns
         if(frameCount % 85 === 0) platforms.push({ x: Math.random() * (W - 120), y: -50, w: 120, h: 15 });
         if(frameCount % 20 === 0) coins.push({ x: Math.random() * (W - 20) + 10, y: -50, type: 'yellow' });
-        if(frameCount % 650 === 0) coins.push({ x: Math.random() * (W - 20) + 10, y: -50, type: 'red' });
-        if(frameCount % 550 === 0) coins.push({ x: Math.random() * (W - 20) + 10, y: -50, type: 'green' });
+        if(frameCount % 600 === 0) coins.push({ x: Math.random() * (W - 20) + 10, y: -50, type: 'red' });
+        if(frameCount % 500 === 0) coins.push({ x: Math.random() * (W - 20) + 10, y: -50, type: 'green' });
 
         // Plataformas
         for (let i = platforms.length - 1; i >= 0; i--) {
@@ -146,14 +151,13 @@
             coins[i].y += gameSpeed;
             let c = coins[i];
 
-            // Ímã puxando moedas amarelas
             if(magnetTime > 0 && c.type === 'yellow') {
                 let dxM = balloonX - c.x;
                 let dyM = balloonY - c.y;
                 let distM = Math.sqrt(dxM*dxM + dyM*dyM);
-                if(distM < 180) {
-                    c.x += dxM * 0.12;
-                    c.y += dyM * 0.12;
+                if(distM < 200) {
+                    c.x += dxM * 0.15;
+                    c.y += dyM * 0.15;
                 }
             }
 
@@ -166,9 +170,9 @@
                     score += 1;
                     gameSpeed += 0.05;
                 } else if(c.type === 'red') {
-                    shieldTime = 1200; // 20 seg
+                    shieldTime = 1200; // 20s
                 } else if(c.type === 'green') {
-                    magnetTime = 1200; // 20 seg
+                    magnetTime = 1200; // 20s
                 }
                 scoreVal.innerText = score;
                 coins.splice(i, 1);
@@ -182,14 +186,12 @@
     function draw() {
         ctx.clearRect(0, 0, W, H);
 
-        // Moedas
         coins.forEach(c => {
             ctx.fillStyle = c.type === 'yellow' ? "yellow" : (c.type === 'red' ? "red" : "#00FF00");
             ctx.beginPath(); ctx.arc(c.x, c.y, 10, 0, Math.PI*2); ctx.fill();
             ctx.strokeStyle = "white"; ctx.lineWidth = 2; ctx.stroke();
         });
 
-        // Efeitos de Aura no Balão
         if(shieldTime > 0) {
             ctx.strokeStyle = "rgba(255, 0, 0, 0.6)";
             ctx.lineWidth = 6;
@@ -201,7 +203,6 @@
             ctx.beginPath(); ctx.arc(balloonX, balloonY, balloonRadius + 10, 0, Math.PI*2); ctx.stroke();
         }
 
-        // Balão
         ctx.fillStyle = "red";
         ctx.beginPath(); ctx.arc(balloonX, balloonY, balloonRadius, 0, Math.PI*2); ctx.fill();
         ctx.fillStyle = "#333";
@@ -209,7 +210,6 @@
         ctx.strokeStyle = "#333"; ctx.lineWidth = 2;
         ctx.beginPath(); ctx.moveTo(balloonX, balloonY + 18); ctx.lineTo(balloonX, balloonY + 30); ctx.stroke();
 
-        // Plataformas
         platforms.forEach(p => {
             ctx.fillStyle = "#222";
             ctx.fillRect(p.x, p.y, p.w, p.h);
@@ -225,9 +225,9 @@
         gameRunning = false;
         if(score > record) { 
             record = score; 
-            localStorage.setItem('balao_adventure_master_record', record); 
+            localStorage.setItem(STORAGE_KEY, record); 
         }
-        alertTxt.innerHTML = `Pontuação atual: <b>${score}</b><br>Melhor Recorde: <b style="color:#B8860B;">${record}</b>`;
+        alertTxt.innerHTML = `Pontos: <b>${score}</b><br>Melhor Recorde: <b style="color:#B8860B;">${record}</b>`;
         alertBox.style.display = 'block';
     }
 
