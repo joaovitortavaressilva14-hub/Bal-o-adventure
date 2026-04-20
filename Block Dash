@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Block Dash Legendary - Balão</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #000; touch-action: none; font-family: 'Courier New', Courier, monospace; }
+        canvas { display: block; }
+        #ui { position: absolute; top: 20px; width: 100%; text-align: center; color: #0ff; font-size: 24px; font-weight: bold; pointer-events: none; text-shadow: 0 0 10px #0ff; }
+        #reviveBtn { display: none; position: absolute; top: 55%; left: 50%; transform: translate(-50%, -50%); padding: 15px 30px; font-size: 20px; background: #ff0055; color: white; border: none; border-radius: 10px; cursor: pointer; box-shadow: 0 0 20px #ff0055; }
+    </style>
+</head>
+<body>
+    <div id="ui">ONDA: <span id="waveCount">0</span> | RECORDE: <span id="bestWave">0</span></div>
+    <button id="reviveBtn" onclick="revive()">REVIVER (1x)</button>
+    <canvas id="gameCanvas"></canvas>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const waveElement = document.getElementById('waveCount');
+    const bestElement = document.getElementById('bestWave');
+    const reviveBtn = document.getElementById('reviveBtn');
+
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    let waves = 0;
+    let highScore = localStorage.getItem("blockDashRecord") || 0;
+    bestElement.innerText = highScore;
+
+    let gameActive = true;
+    let gameSpeed = 5;
+    let frameCount = 0;
+    let canRevive = true;
+
+    const player = { x: canvas.width / 2, y: canvas.height * 0.75, width: 30, height: 40, targetX: canvas.width / 2 };
+    let obstacles = [];
+
+    const move = (e) => {
+        let x = e.touches ? e.touches[0].clientX : e.clientX;
+        player.targetX = x - player.width / 2;
+    };
+    window.addEventListener('mousemove', move);
+    window.addEventListener('touchstart', move);
+    window.addEventListener('touchmove', move);
+
+    function createWall() {
+        const gapWidth = 100; 
+        const gapX = Math.random() * (canvas.width - gapWidth);
+        // Cria dois blocos que formam uma parede com um buraco
+        obstacles.push({ x: 0, y: -50, width: gapX, height: 30, counted: false });
+        obstacles.push({ x: gapX + gapWidth, y: -50, width: canvas.width - (gapX + gapWidth), height: 30, counted: false });
+    }
+
+    function update() {
+        if (!gameActive) return;
+        player.x += (player.targetX - player.x) * 0.2;
+
+        frameCount++;
+        if (frameCount % Math.max(40, 100 - (waves * 2)) === 0) createWall();
+
+        obstacles.forEach((obs, i) => {
+            obs.y += gameSpeed;
+
+            // Colisão
+            if (player.x < obs.x + obs.width && player.x + player.width > obs.x &&
+                player.y < obs.y + obs.height && player.y + player.height > obs.y) {
+                gameOver();
+            }
+
+            // Conta Onda quando passa pelo jogador
+            if (!obs.counted && obs.y > player.y) {
+                obs.counted = true;
+                // Como cada parede são dois objetos, somamos 0.5 para dar 1 onda completa
+                waves += 0.5;
+                if (Number.isInteger(waves)) {
+                    waveElement.innerText = waves;
+                    gameSpeed += 0.1;
+                }
+            }
+
+            if (obs.y > canvas.height) obstacles.splice(i, 1);
+        });
+    }
+
+    function draw() {
+        // Fundo Arena Neon
+        ctx.fillStyle = "#000";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        // Grade no chão
+        ctx.strokeStyle = "#1a1a2e";
+        for(let i=0; i<canvas.width; i+=40) { ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i,canvas.height); ctx.stroke(); }
+        for(let i=0; i<canvas.height; i+=40) { ctx.beginPath(); ctx.moveTo(0,i); ctx.lineTo(canvas.width,i); ctx.stroke(); }
+
+        // Desenha Jogador (Balão Neon)
+        ctx.fillStyle = "#fff";
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = "#0ff";
+        ctx.beginPath();
+        ctx.ellipse(player.x + 15, player.y + 15, 15, 20, 0, 0, Math.PI*2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+        // Obstáculos (Paredes Laser)
+        obstacles.forEach(obs => {
+            ctx.fillStyle = "#ff0055";
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = "#ff0055";
+            ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+            ctx.shadowBlur = 0;
+        });
+    }
+
+    function gameOver() {
+        gameActive = false;
+        if (canRevive) {
+            reviveBtn.style.display = "block";
+        } else {
+            finalizeGame();
+        }
+    }
+
+    function revive() {
+        canRevive = false;
+        reviveBtn.style.display = "none";
+        obstacles = []; // Limpa as paredes pra não morrer de novo na hora
+        gameActive = true;
+    }
+
+    function finalizeGame() {
+        if (waves > highScore) {
+            localStorage.setItem("blockDashRecord", waves);
+            alert("NOVA LENDA! 🏆 Ondas: " + waves);
+        } else {
+            alert("FIM DA LINDA! Ondas: " + waves);
+        }
+        location.reload();
+    }
+
+    function loop() { update(); draw(); requestAnimationFrame(loop); }
+    loop();
+</script>
+</body>
+</html>
