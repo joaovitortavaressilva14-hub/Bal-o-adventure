@@ -3,46 +3,38 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Balão Adventure Turbo</title>
+    <title>Balão Adventure V2</title>
     <style>
-        body { margin: 0; overflow: hidden; background-color: #fff; touch-action: none; }
-        canvas { display: block; }
-        #ui { position: absolute; top: 10px; left: 20px; font-family: sans-serif; font-size: 24px; color: #333; pointer-events: none; }
+        body { margin: 0; overflow: hidden; background-color: #e0f7fa; touch-action: none; font-family: 'Arial', sans-serif; }
+        canvas { display: block; background: linear-gradient(to bottom, #87CEEB, #E0F7FA); }
+        #ui { position: absolute; top: 10px; left: 10px; font-size: 18px; color: #333; font-weight: bold; pointer-events: none; background: rgba(255,255,255,0.7); padding: 5px 10px; border-radius: 10px; }
     </style>
 </head>
 <body>
-
-    <div id="ui">Pontos: <span id="score">0</span></div>
+    <div id="ui">Pontos: <span id="score">0</span> | Recorde: <span id="best">0</span></div>
     <canvas id="gameCanvas"></canvas>
 
 <script>
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
     const scoreElement = document.getElementById('score');
+    const bestElement = document.getElementById('best');
 
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
 
     let score = 0;
+    let highScore = localStorage.getItem("balaoRecorde") || 0;
+    bestElement.innerText = highScore;
+
     let gameActive = true;
+    let gameSpeed = 4;
     let frameCount = 0;
-    
-    // --- A MÁGICA DA VELOCIDADE ---
-    let gameSpeed = 4; // Velocidade inicial
-    let speedIncrement = 0.2; // Quanto aumenta a cada nível
 
-    const player = {
-        x: canvas.width / 2,
-        y: canvas.height * 0.7,
-        width: 30,
-        height: 45,
-        targetX: canvas.width / 2
-    };
-
+    const player = { x: canvas.width / 2, y: canvas.height * 0.7, width: 30, height: 45, targetX: canvas.width / 2 };
     let obstacles = [];
     let items = [];
 
-    // Movimentação suave pelo dedo/mouse
     const move = (e) => {
         let x = e.touches ? e.touches[0].clientX : e.clientX;
         player.targetX = x - player.width / 2;
@@ -54,7 +46,7 @@
     function createObstacle() {
         const width = Math.random() * (canvas.width * 0.4) + 60;
         const x = Math.random() * (canvas.width - width);
-        obstacles.push({ x, y: -40, width, height: 12 });
+        obstacles.push({ x, y: -40, width, height: 15 });
     }
 
     function createItem() {
@@ -64,26 +56,19 @@
 
     function update() {
         if (!gameActive) return;
-
-        // Movimento suave do balão
-        player.x += (player.targetX - player.x) * 0.18;
+        player.x += (player.targetX - player.x) * 0.15;
 
         frameCount++;
-        // Ajusta o surgimento de itens conforme a velocidade
-        if (frameCount % Math.max(20, Math.floor(80 - gameSpeed)) === 0) createObstacle();
+        if (frameCount % Math.max(25, Math.floor(80 - gameSpeed * 2)) === 0) createObstacle();
         if (frameCount % 50 === 0) createItem();
 
-        // Atualiza Obstáculos
         obstacles.forEach((obs, i) => {
-            obs.y += gameSpeed; // Usa a velocidade variável
+            obs.y += gameSpeed;
             if (player.x < obs.x + obs.width && player.x + player.width > obs.x &&
-                player.y < obs.y + obs.height && player.y + player.height > obs.y) {
-                gameOver();
-            }
+                player.y < obs.y + obs.height && player.y + player.height > obs.y) gameOver();
             if (obs.y > canvas.height) obstacles.splice(i, 1);
         });
 
-        // Atualiza Itens
         items.forEach((item, i) => {
             item.y += gameSpeed;
             const dist = Math.hypot((player.x + 15) - item.x, (player.y + 20) - item.y);
@@ -91,13 +76,7 @@
                 score++;
                 scoreElement.innerText = score;
                 items.splice(i, 1);
-                
-                // --- ACELERAÇÃO ---
-                // A cada 5 pontos, o jogo fica mais rápido!
-                if (score % 5 === 0) {
-                    gameSpeed += speedIncrement;
-                    console.log("Velocidade atual:", gameSpeed);
-                }
+                gameSpeed += 0.15; // Aceleração constante
             }
             if (item.y > canvas.height) items.splice(i, 1);
         });
@@ -105,49 +84,53 @@
 
     function draw() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-        // Desenhar Balão
-        ctx.fillStyle = "#666";
+        
+        // Desenha Balão
+        ctx.fillStyle = "#ff5252"; // Balão Vermelho
         ctx.beginPath();
-        ctx.ellipse(player.x + 15, player.y + 15, 15, 18, 0, 0, Math.PI*2);
+        ctx.ellipse(player.x + 15, player.y + 15, 15, 20, 0, 0, Math.PI*2);
         ctx.fill();
-        ctx.fillStyle = "#333";
+        ctx.fillStyle = "#795548"; // Cestinha
         ctx.fillRect(player.x + 10, player.y + 35, 10, 8);
 
-        // Desenhar Blocos com Espinhos (Visual do vídeo)
+        // Obstáculos
         obstacles.forEach(obs => {
-            ctx.fillStyle = "#222";
+            ctx.fillStyle = "#37474f";
             ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+            // Espinhos
+            ctx.fillStyle = "#000";
             for(let i=0; i<obs.width; i+=10) {
                 ctx.beginPath();
                 ctx.moveTo(obs.x + i, obs.y + obs.height);
-                ctx.lineTo(obs.x + i + 5, obs.y + obs.height + 8);
+                ctx.lineTo(obs.x + i + 5, obs.y + obs.height + 7);
                 ctx.lineTo(obs.x + i + 10, obs.y + obs.height);
                 ctx.fill();
             }
         });
 
-        // Desenhar Moedas/Bolinhas
+        // Moedas/Itens
         items.forEach(item => {
-            ctx.strokeStyle = "#333";
-            ctx.lineWidth = 2;
+            ctx.fillStyle = "#ffd700";
             ctx.beginPath();
             ctx.arc(item.x, item.y, item.radius, 0, Math.PI*2);
+            ctx.fill();
+            ctx.strokeStyle = "#b8860b";
             ctx.stroke();
         });
     }
 
     function gameOver() {
         gameActive = false;
-        alert("PERDEU! Pontuação: " + score);
+        if (score > highScore) {
+            localStorage.setItem("balaoRecorde", score);
+            alert("NOVO RECORDE! 🎉: " + score);
+        } else {
+            alert("PERDEU! Pontuação: " + score + "\nRecorde: " + highScore);
+        }
         location.reload();
     }
 
-    function loop() {
-        update();
-        draw();
-        requestAnimationFrame(loop);
-    }
+    function loop() { update(); draw(); requestAnimationFrame(loop); }
     loop();
 </script>
 </body>
